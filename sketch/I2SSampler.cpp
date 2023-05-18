@@ -29,7 +29,8 @@ void I2SSampler::processI2SData(uint8_t *i2sData, size_t bytes_read)
     {
 
         // you may need to vary the >> 11 to fit your volume - ideally we'd have some kind of AGC here
-        addSample(filteredSample >> 11);
+        addSample(samples[i] >> 11);
+        //addSample(samples[i] );
     }
 }
 
