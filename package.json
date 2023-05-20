@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "loudness": "^0.4.1",
+    "pcm-volume": "^1.0.0"
+  }
+}

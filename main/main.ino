@@ -33,12 +33,12 @@
 #include <soc/i2s_reg.h>
 
 //Set youy WiFi network name and password:
-const char* ssid = "your_ssid";
-const char* pswd = "your_password";
+const char* ssid = "Robot";
+const char* pswd = "123456789";
 
 // Set your listener PC's IP here in according with your DHCP network. In my case is 192.168.1.40:
-IPAddress udpAddress(192, 168, 1, 40);
-const int udpPort = 16500; //UDP Listener Port:
+IPAddress udpAddress(192, 168, 11, 199);
+const int udpPort = 7777; //UDP Listener Port:
 
 boolean connected = false; //UDP State:
 
@@ -50,6 +50,7 @@ const int block_size = 128;
 void setup() {
     Serial.begin(115200);
     Serial.println("Configuring WiFi");
+    pinMode(2,OUTPUT);
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, pswd);
     if (WiFi.waitForConnectResult() != WL_CONNECTED) {
@@ -64,7 +65,7 @@ void setup() {
     esp_err_t err;
     const i2s_config_t i2s_config = {
         .mode = i2s_mode_t(I2S_MODE_MASTER | I2S_MODE_RX), 
-        .sample_rate = 96000,
+        .sample_rate = 44100,
         .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT, 
         .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,  
         .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
@@ -75,10 +76,10 @@ void setup() {
 
     // ESP32 GPIO PINS > I2S MIC PINS:
     const i2s_pin_config_t pin_config = {
-        .bck_io_num = 26,   // > SCK
-        .ws_io_num = 25,    // > WS
+        .bck_io_num = 14,   // > SCK
+        .ws_io_num = 27,    // > WS
         .data_out_num = -1, // Serial Data Out is no connected
-        .data_in_num = 32,  // > SD
+        .data_in_num = 26,  // > SD
     };
 
     // CONFIGURE I2S DRIVER AND PINS.
@@ -123,6 +124,7 @@ void loop() {
     else {
         switch (state) {
             case 0: // wait for index to pass halfway
+                digitalWrite(2,1);
                 if (rpt > 1023) {
                 state = 1;
                 }
