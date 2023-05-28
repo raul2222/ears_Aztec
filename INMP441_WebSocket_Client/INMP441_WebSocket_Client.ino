@@ -3,14 +3,14 @@
 #include <WiFi.h>
 
 
-#define I2S_SD 26
-#define I2S_WS 27
-#define I2S_SCK 12
+#define I2S_SD 23
+#define I2S_WS 4
+#define I2S_SCK 5
 
 #define I2S_PORT I2S_NUM_0
 
-#define bufferCnt 8
-#define bufferLen 480
+#define bufferCnt 4
+#define bufferLen 512
 int16_t sBuffer[bufferLen];
 
 // Estructura del filtro
@@ -41,7 +41,7 @@ HighPassFilter hpFilter;
 const char* ssid = "Robot";
 const char* password = "123456789";
 
-const char* tcpAddress = "192.168.11.199";
+const char* tcpAddress = "192.168.0.199";
 const uint16_t tcpPort = 9999;  // <WEBSOCKET_SERVER_PORT>
 
 boolean connected = false;
@@ -56,11 +56,11 @@ int accumulatedIndex = 0;
 
 
 void micTask(void* parameter) {
-  highPassFilterInit(&hpFilter, 400.0, 48000.0);
+  highPassFilterInit(&hpFilter, 400.0, 32000.0);
   i2s_install();
   i2s_setpin();
   i2s_start(I2S_PORT);
-  double amplificationFactor = 28.5; 
+  double amplificationFactor = 32; 
   size_t bytesIn = 0;
   while (1) {
     esp_err_t result = i2s_read(I2S_PORT, &sBuffer, bufferLen, &bytesIn, portMAX_DELAY);
@@ -68,13 +68,15 @@ void micTask(void* parameter) {
       
       for (int i = 0; i < bytesIn / 2; i++) {
           int16_t sample = ((int16_t*)sBuffer)[i];
+
+          sample *= amplificationFactor;
+          sample = (sample > INT16_MAX) ? INT16_MAX : (sample < -INT16_MAX) ? -INT16_MAX : sample;
+
           sample = highPassFilterApply(&hpFilter, sample);
           if (abs(sample) > COMPRESSOR_THRESHOLD) {
               int sign = (sample > 0) ? 1 : -1;
               sample = sign * COMPRESSOR_THRESHOLD + (abs(sample) - COMPRESSOR_THRESHOLD) / COMPRESSOR_RATIO;
           }
-          sample *= amplificationFactor;
-          sample = (sample > INT16_MAX) ? INT16_MAX : (sample < -INT16_MAX) ? -INT16_MAX : sample;
           accumulatedBuffer[accumulatedIndex] = sample;
           accumulatedIndex++;
 
@@ -100,7 +102,7 @@ void i2s_install() {
   // Set up I2S Processor configuration
   const i2s_config_t i2s_config = {
     .mode = i2s_mode_t(I2S_MODE_MASTER | I2S_MODE_RX),
-    .sample_rate = 48000,
+    .sample_rate = 32000,
     //.sample_rate = 16000,
     .bits_per_sample = i2s_bits_per_sample_t(16),
     .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
@@ -147,6 +149,7 @@ void loop() {
           connected = false;
         } else {
           connected = true;
+          esp_restart();
         }
       }
       delay(1000);
