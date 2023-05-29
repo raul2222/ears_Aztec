@@ -13,7 +13,7 @@ import queue
 from pydub import AudioSegment
 import openai
 from langchain.memory import ConversationBufferMemory
-from langchain import OpenAI, LLMChain, PromptTemplate 
+from langchain import  LLMChain, PromptTemplate 
 from langchain.chat_models import ChatOpenAI
 from elevenlabs import generate, play, voices, voice, set_api_key
 import signal

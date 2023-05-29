@@ -4,6 +4,9 @@ __pycache__/
 *$py.class
 *.wav
 *.mp3
+*.srt
+*.txt
+
 # C extensions
 *.so
 
