@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../aztec_voice"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../aztec_ws"
+		}
+	],
+	"settings": {}
+}

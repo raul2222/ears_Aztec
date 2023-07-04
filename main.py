@@ -15,11 +15,18 @@ import openai
 from langchain.memory import ConversationBufferMemory
 from langchain import  LLMChain, PromptTemplate 
 from langchain.chat_models import ChatOpenAI
-from elevenlabs import generate, play, voices, voice, set_api_key
+import requests
+
 import signal
 from queue import Empty
+from faster_whisper import WhisperModel
+import time
+import requests
+import json
+model_size = "small"
 
-set_api_key(os.getenv('ELEVEN_API_KEY'))
+modelo = WhisperModel(model_size, device="cpu", compute_type="int8",num_workers=2, cpu_threads=8)
+
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 model_id_whisper = 'whisper-1'
@@ -53,9 +60,9 @@ data_queue = queue.Queue()
 post_speech_queue = collections.deque(maxlen=2)
 
 template = """Eres Aztec, un robot que interactua con niños autistas, 
-trabajas en una asociacion de niños autistas, proporcionas respuestas cortas,
+trabajas en una asociacion de niños autistas, no pronuncies autista, proporcionas respuestas cortas,
 tienes mucho tacto con lo que dices porque estas rodeado de niños pequeños, 
-eres anable, agradable, simpatico, siempre estas dispuesto a ayudar a los demás,
+eres amable, agradable, simpatico, siempre estas dispuesto a ayudar a los demás,
 
 
 {chat_history}
@@ -84,42 +91,53 @@ block_write_data = False
 
 def send_audio_to_whisper(mp3):
     inicio = timeit.default_timer()
-    audio_file = open(mp3, "rb")
-    response = openai.Audio.transcribe(
-        api_key=OPENAI_API_KEY,
-        model=model_id_whisper,
-        file=audio_file,
-        language="es"
-    )
-    print("Transcripcion Whisper: " + response['text'])
+
+
+    segments, info = modelo.transcribe(mp3, beam_size=5)
+    print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
+    response = ""
+    if info.language!="es":
+        return None
+    for segment in segments:
+        print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+        response = response + segment.text
+    print("Transcripcion Whisper: " + response)
     fin = timeit.default_timer()
     print(f"La función Whisper tardó {fin - inicio} segundos.")
-    if response['text'] == "" or response['text'] == "Un poquito más." or response['text'] == "Subtítulos realizados por la comunidad de Amara.org" or response['text'] ==  "¡Gracias por ver el vídeo!":
+    if response == "" or response == "Un poquito más." or response == "Subtítulos realizados por la comunidad de Amara.org" or response ==  "¡Gracias por ver el vídeo!":
         return None
     else:
-        return response['text']
+        return response
 
 def play_audio_thread(file_path):
     mp3_file = compress_audio(file_path)
     result_whisper = send_audio_to_whisper(mp3_file)
     if result_whisper != None:
         inicio = timeit.default_timer()
-        res_longchain = llm_chain.predict(human_input=result_whisper)
+        res_longchain = ". . . . "+llm_chain.predict(human_input=result_whisper)
         fin = timeit.default_timer()
         print(f"La función LongChain tardó {fin - inicio} segundos.")
 
         if res_longchain != None:
-            audio = generate(text=res_longchain, voice='6cP8I3tOFFGkwZ7UfTqz', model='eleven_multilingual_v1')
-            play(audio)
-            print("fin audio *********************")
-            time.sleep(2.15)
-        # Aquí puedes realizar cualquier acción adicional con el resultado,
-        # como guardar la transcripción en una base de datos o procesarla de alguna otra manera
+            url = "http://localhost:5000/synthesize"
+            data = {"text": res_longchain}
+            headers = {"Content-Type": "application/json"}
+
+            response = requests.post(url, data=json.dumps(data), headers=headers)
+            print(response)
+
+           
 
     # Desbloquea el trabajo de write_data_to_file
     global block_write_data
     global accumulated_buffer
     block_write_data = False
+    time.sleep(0.25)
+    try:
+        response = requests.get("http://192.168.0.196/aztec")
+    except Exception as e:
+        print(e)
+ 
     accumulated_buffer = b''
 
 def write_data_to_file():
@@ -182,6 +200,10 @@ def write_data_to_file():
                     ###########################
                     block_write_data = True  # Bloquea el trabajo de write_data_to_file
                     wav_file = None
+                    try:
+                        response = requests.get("http://192.168.0.196/aztecl")
+                    except Exception as e:
+                        print(e)
                     output_file_count += 1
                     non_speech_frames.clear()
                     # Send the file to Whisper for transcription
@@ -224,7 +246,9 @@ try:
                     print("Client disconnected")
                     break
 
-                buffer += data
+                # Verificar si el trabajo está bloqueado
+                if not block_write_data:
+                    buffer += data
 
                 while len(buffer) >= FRAME_LENGTH_BYTES and not exit_event.is_set():
                     frame = buffer[:FRAME_LENGTH_BYTES]

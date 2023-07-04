@@ -3,9 +3,9 @@
 #include <WiFi.h>
 
 
-#define I2S_SD 23
-#define I2S_WS 4
-#define I2S_SCK 5
+#define I2S_SD 32
+#define I2S_WS 25
+#define I2S_SCK 33
 
 #define I2S_PORT I2S_NUM_0
 
@@ -41,7 +41,7 @@ HighPassFilter hpFilter;
 const char* ssid = "Robot";
 const char* password = "123456789";
 
-const char* tcpAddress = "192.168.0.199";
+const char* tcpAddress = "192.168.0.197";
 const uint16_t tcpPort = 9999;  // <WEBSOCKET_SERVER_PORT>
 
 boolean connected = false;
@@ -53,6 +53,30 @@ WiFiClient client;
 #define ACCUMULATED_SAMPLES 1
 int16_t accumulatedBuffer[bufferLen * ACCUMULATED_SAMPLES];
 int accumulatedIndex = 0;
+
+#include <ESP32Servo.h>
+
+// create four servo objects 
+Servo servo1;
+Servo servo2;
+
+// Published values for SG90 servos; adjust if needed
+int minUs = 500;
+int maxUs = 2500;
+
+// These are all GPIO pins on the ESP32
+// Recommended pins include 2,4,12-19,21-23,25-27,32-33
+// for the ESP32-S2 the GPIO pins are 1-21,26,33-42
+// for the ESP32-S3 the GPIO pins are 1-21,35-45,47-48
+// for the ESP32-C3 the GPIO pins are 1-10,18-21
+
+int servo1Pin = 26;
+int servo2Pin = 27;
+
+int mytime = 39;
+
+int pos = 0;      // position in degrees
+ESP32PWM pwm;
 
 
 void micTask(void* parameter) {
@@ -68,7 +92,6 @@ void micTask(void* parameter) {
       
       for (int i = 0; i < bytesIn / 2; i++) {
           int16_t sample = ((int16_t*)sBuffer)[i];
-
           sample *= amplificationFactor;
           sample = (sample > INT16_MAX) ? INT16_MAX : (sample < -INT16_MAX) ? -INT16_MAX : sample;
 
@@ -82,6 +105,7 @@ void micTask(void* parameter) {
 
           if (accumulatedIndex >= bufferLen * ACCUMULATED_SAMPLES) {  // buffer is full, send data
             if (client.connected()) {
+
               client.write((const uint8_t*)accumulatedBuffer, bufferLen * ACCUMULATED_SAMPLES * sizeof(int16_t));
               accumulatedIndex = 0;  // reset index
             } else {
@@ -128,8 +152,28 @@ void i2s_setpin() {
   i2s_set_pin(I2S_PORT, &pin_config);
 }
 
+void normal_pose(){
+  servo1.write(100);
+  delay(1000);   
+  servo2.write(72);
+  delay(1000); 
+}
+
+
 void setup() {
   Serial.begin(115200);
+	// Allow allocation of all timers
+	//ESP32PWM::allocateTimer(0);
+	//ESP32PWM::allocateTimer(1);
+	//ESP32PWM::allocateTimer(2);
+	ESP32PWM::allocateTimer(3);
+	
+	servo1.setPeriodHertz(250);      // Standard 50hz servo
+	servo2.setPeriodHertz(250);      // Standard 50hz servo
+  servo1.attach(servo1Pin, minUs, maxUs);
+	servo2.attach(servo2Pin, minUs, maxUs);
+  normal_pose();
+
 
 
   connectToWiFi(ssid, password);
@@ -137,11 +181,23 @@ void setup() {
 
 
   xTaskCreatePinnedToCore(micTask, "micTask", 10000, NULL, 1, NULL, 1);
-
+  Serial.println("start");
  
 }
 
 void loop() {
+
+      if(WiFi.status() != WL_CONNECTED){
+        Serial.println("WiFi connection lost. Trying to reconnect...");
+        WiFi.begin(ssid, password);
+        
+        while (WiFi.status() != WL_CONNECTED) {
+            delay(1000);
+            Serial.println("Reconnecting to WiFi...");
+        }
+ 
+        Serial.println("Reconnected to WiFi");
+    }
 
       if(connected==false){
         if (!client.connect(tcpAddress, tcpPort)) {
